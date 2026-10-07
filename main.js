@@ -250,9 +250,14 @@ function teamDirectory(html) {
 }
 
 function submitForm(html) {
-  const formMatch = html.match(/<form\b[^>]*id=["']solution_submit["'][^>]*>[\s\S]*?<\/form>/i);
-  if (!formMatch) return { action: null, fields: {} };
-  const form = formMatch[0];
+  const forms = html.match(/<form\b[^>]*>[\s\S]*?<\/form>/gi) || [];
+  const form = forms.find(candidate => {
+    const startTag = candidate.match(/^<form\b[^>]*>/i)?.[0] || '';
+    const action = attribute(startTag, 'action') || '';
+    const marker = `${attribute(startTag, 'id') || ''} ${attribute(startTag, 'class') || ''} ${action}`.toLowerCase();
+    return action.toLowerCase().includes('/api/solution/') || (marker.includes('solution') && marker.includes('submit'));
+  });
+  if (!form) return { action: null, fields: {} };
   const startTag = form.match(/^<form\b[^>]*>/i)?.[0] || '';
   const fields = {};
   for (const match of form.matchAll(/<input\b[^>]*>/gi)) {
@@ -264,6 +269,43 @@ function submitForm(html) {
     }
   }
   return { action: attribute(startTag, 'action'), fields };
+}
+
+function isLoginPage(html) {
+  return /\/auth\/login\//i.test(html) && /name=["']password["']/i.test(html);
+}
+
+function responseSolutionId(text) {
+  const fromUrl = text.match(/\/solution\/(\d+)\/?/);
+  if (fromUrl) return fromUrl[1];
+  try {
+    const visit = (value, key = '') => {
+      if (Array.isArray(value)) return value.map(item => visit(item, key)).find(Boolean) || null;
+      if (value && typeof value === 'object') return Object.entries(value).map(([name, item]) => visit(item, name.toLowerCase())).find(Boolean) || null;
+      if (['solutionid', 'solution_id', 'solution'].includes(key) && /^\d+$/.test(String(value))) return String(value);
+      if (['url', 'redirect', 'redirecturl'].includes(key)) return String(value).match(/\/solution\/(\d+)\/?/)?.[1] || null;
+      return null;
+    };
+    return visit(JSON.parse(text));
+  } catch (_) { return null; }
+}
+
+async function submissionIds(group, course, problem, user) {
+  const parameters = new URLSearchParams({ userName: user || '', classId: '0', problemNumber: problem });
+  const remote = await remoteRequest(`${groupOrigin(group)}/${course}/status/?${parameters}`);
+  return new Set([...remote.body.toString('utf8').matchAll(/\/solution\/(\d+)\/?/g)].map(match => match[1]));
+}
+
+async function waitForNewSolution(group, course, problem, user, before) {
+  for (const delay of [250, 500, 800, 1200, 1800, 2500]) {
+    await new Promise(resolve => setTimeout(resolve, delay));
+    try {
+      const ids = await submissionIds(group, course, problem, user);
+      const fresh = [...ids].filter(id => !before.has(id));
+      if (fresh.length) return fresh.sort((left, right) => Number(right) - Number(left))[0];
+    } catch (_) {}
+  }
+  return null;
 }
 
 function readBody(request) {
@@ -496,15 +538,22 @@ async function handlePost(request, response, url) {
       const groupUrl = groupOrigin(group);
       const page = await remoteRequest(`${groupUrl}/${course}/${problem}/submit/`);
       if (page.status === 401) return json(response, 401, { error: '尚未登录，请先在本页登录' });
-      const parsed = submitForm(page.body.toString('utf8'));
-      if (!parsed.action) return json(response, 401, { error: '登录状态已失效，请重新登录' });
+      const submitPage = page.body.toString('utf8');
+      if (isLoginPage(submitPage)) return json(response, 401, { error: '官网没有保存登录状态，请重新登录后再试' });
+      const parsed = submitForm(submitPage);
+      if (!parsed.action) return json(response, 502, { error: '已登录，但未能识别官网的提交表单；请刷新题目后重试' });
+      const session = await loginState(course, group);
+      let before = new Set();
+      if (session.loggedIn) {
+        try { before = await submissionIds(group, course, problem, session.user); } catch (_) {}
+      }
       const form = new URLSearchParams(parsed.fields);
       form.set('language', language);
       form.set('source', Buffer.from(source).toString('base64'));
       const submitUrl = new URL(parsed.action, `${groupUrl}/`).toString();
       const remote = await remoteRequest(submitUrl, {
         method: 'POST', body: form.toString(),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest', Origin: groupUrl, Referer: `${groupUrl}/${course}/${problem}/submit/` },
       });
       const result = remote.body.toString('utf8');
       if (remote.status >= 400) return json(response, remote.status, { error: stripText(result) || `OpenJudge 返回 HTTP ${remote.status}` });
@@ -512,8 +561,9 @@ async function handlePost(request, response, url) {
       try { const parsedResult = JSON.parse(result); message = parsedResult.message || parsedResult.msg || message; } catch (_) {
         if (result.trim().length > 0 && result.trim().length < 120) message = result.trim();
       }
-      const id = result.match(/\/solution\/(\d+)\/?/);
-      return json(response, 200, { ok: true, message, solutionId: id ? id[1] : null });
+      let solutionId = responseSolutionId(result);
+      if (!solutionId && session.loggedIn) solutionId = await waitForNewSolution(group, course, problem, session.user, before);
+      return json(response, 200, { ok: true, message, solutionId });
     } catch (error) { return json(response, 502, { error: error.message }); }
   }
   return json(response, 404, { error: '接口不存在' });
