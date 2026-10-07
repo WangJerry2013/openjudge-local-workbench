@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>OpenJudge 提交结果</title>
+  <style>
+    :root{--blue:#3157d5;--bg:#f4f6fa;--line:#dfe3ea;--text:#172033;--muted:#697386;--green:#067647;--red:#b42318;--amber:#b54708}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}header{position:sticky;top:0;z-index:1000;height:62px;padding:0 24px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}h1{font-size:19px;margin:0}.grow{flex:1}button,a.btn{border:0;border-radius:7px;padding:9px 14px;background:var(--blue);color:#fff;text-decoration:none;cursor:pointer;font:inherit}.light{background:#eef2ff!important;color:#2949ac!important}.history-nav{display:flex;gap:8px;flex:none}
+    main{max-width:1240px;margin:18px auto;padding:0 18px}.panel{background:#fff;border:1px solid var(--line);border-radius:10px}.summary{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}.stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:13px}.stat span{display:block;color:var(--muted);font-size:12px}.stat strong{display:block;font-size:18px;margin-top:3px;overflow:hidden;text-overflow:ellipsis}.ok{color:var(--green)}.bad{color:var(--red)}.pending{color:var(--amber)}
+    .toast-stack{position:fixed;right:18px;top:76px;z-index:3000;width:min(390px,calc(100vw - 36px));display:grid;gap:10px;pointer-events:none}.toast{pointer-events:auto;display:grid;grid-template-columns:1fr auto;align-items:start;gap:10px;padding:12px 13px;border:1px solid #cad5f5;border-radius:10px;background:#f5f7ff;color:#2949ac;box-shadow:0 12px 32px #1018282b;animation:toast-in .18s ease-out}.toast.bad{background:#fff0ef;border-color:#fecdca;color:var(--red)}.toast button{padding:0;border:0;background:transparent;color:currentColor;font-size:12px;line-height:1.4;opacity:.7}.toast.hiding{opacity:0;transform:translateY(-6px);transition:.18s}@keyframes toast-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+    .panel{padding:16px;margin-bottom:14px}.head{display:flex;align-items:center;gap:10px;margin-bottom:10px}.head h2{font-size:16px;margin:0}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;white-space:nowrap}th,td{padding:9px 10px;border-bottom:1px solid #eaecf0;text-align:left}th{color:var(--muted);font-size:12px}tbody tr{cursor:pointer}tbody tr:hover,tbody tr.active{background:#f4f6ff}.code{margin:0;max-height:520px;overflow:auto;white-space:pre;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#111827;color:#e5e7eb;border-radius:8px;padding:15px}.empty{padding:28px;text-align:center;color:var(--muted)}
+    @media(max-width:800px){.summary{grid-template-columns:repeat(2,1fr)}header{padding:0 12px}.history-nav{position:fixed;bottom:12px;left:12px;z-index:1001;padding:4px;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:10px;box-shadow:0 4px 16px #1b2a4a1f}main{padding:0 10px 76px}.stat:last-child{grid-column:span 2}}
+  </style>
+</head>
+<body>
+  <header><div class="history-nav" aria-label="浏览历史"><button class="light" onclick="history.back()" title="返回上一页">上一步</button><button class="light" onclick="history.forward()" title="前往下一页">下一步</button></div><h1>提交结果</h1><span id="scope"></span><span class="grow"></span><button id="refresh" class="light">刷新本次提交</button><a class="btn light" href="/">返回题目</a></header>
+  <div id="toastStack" class="toast-stack" aria-live="polite" aria-label="通知"></div>
+  <main>
+    <section class="summary">
+      <div class="stat"><span>状态</span><strong id="result">—</strong></div>
+      <div class="stat"><span>分数</span><strong id="score">—</strong></div>
+      <div class="stat"><span>运行时间</span><strong id="time">—</strong></div>
+      <div class="stat"><span>内存</span><strong id="memory">—</strong></div>
+      <div class="stat"><span>语言</span><strong id="language">—</strong></div>
+    </section>
+    <section class="panel">
+      <div class="head"><h2>我的提交记录</h2><span class="grow"></span><span id="pollState"></span></div>
+      <div class="table-wrap"><table><thead><tr><th>#</th><th>题目</th><th>结果</th><th>分数</th><th>内存</th><th>时间</th><th>代码长度</th><th>语言</th><th>提交时间</th></tr></thead><tbody id="history"></tbody></table></div>
+    </section>
+    <section class="panel">
+      <div class="head"><h2 id="codeTitle">源代码</h2><span class="grow"></span><button id="copy" class="light">复制代码</button></div>
+      <pre id="code" class="code">选择一条提交记录查看代码。</pre>
+    </section>
+  </main>
+<script>
+const $=id=>document.getElementById(id),query=new URLSearchParams(location.search),group=(query.get('group')||'hihocoder').toLowerCase().replace(/[^a-z0-9-]/g,''),course=(query.get('course')||'').replace(/[^A-Za-z0-9_-]/g,''),problem=(query.get('problem')||'').replace(/[^A-Za-z0-9_-]/g,'');
+let rows=[],selectedId='',targetId=(query.get('id')||'').replace(/\D/g,''),timer=null,source='',loadedSourceId='';$('scope').textContent=`${group}.openjudge.cn / ${problem?`${course}/${problem}`:course}`;
+function notice(text,bad=false){if(!text)return;const stack=$('toastStack'),toast=document.createElement('div'),content=document.createElement('span'),close=document.createElement('button');toast.className='toast'+(bad?' bad':'');content.textContent=text;close.type='button';close.textContent='关闭';close.title='关闭通知';const remove=()=>{toast.classList.add('hiding');setTimeout(()=>toast.remove(),180)};close.onclick=remove;toast.append(content,close);stack.prepend(toast);while(stack.children.length>5)stack.lastElementChild.remove();toast.hideTimer=setTimeout(remove,bad?8000:5500)}
+function statusClass(value){if(/Accepted/i.test(value))return'ok';if(/Waiting|Pending|Compil|Running|Judg/i.test(value))return'pending';return'bad'}
+function terminal(value){return !/Waiting|Pending|Compil|Running|Judg|Queue/i.test(value)}
+function parseRows(html){const d=new DOMParser().parseFromString(html,'text/html'),out=[];d.querySelectorAll('table tr').forEach(tr=>{const cells=[...tr.querySelectorAll('td')].map(td=>td.textContent.trim()),link=tr.querySelector('a[href*="/solution/"]');if(cells.length<10||!link)return;const m=link.getAttribute('href').match(/\/solution\/(\d+)\//);if(!m)return;out.push({id:m[1],user:cells[0],problem:cells[2],result:cells[3],score:cells[4],memory:cells[5],time:cells[6],length:cells[7],language:cells[8],submitted:cells[9]})});return out}
+function showSummary(row){if(!row)return;for(const key of['result','score','time','memory','language'])$(key).textContent=row[key]||'—';$('result').className=statusClass(row.result)}
+function setRecordUrl(id,push){const url=new URL(location.href);url.searchParams.set('id',id);history[push?'pushState':'replaceState']({id},'',url)}
+function renderRows(){const body=$('history');body.innerHTML='';if(!rows.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=9;td.className='empty';td.textContent='没有找到提交记录';tr.append(td);body.append(tr);return}rows.forEach(row=>{const tr=document.createElement('tr');if(row.id===selectedId)tr.className='active';[row.id,row.problem,row.result,row.score,row.memory,row.time,row.length,row.language,row.submitted].forEach((value,index)=>{const td=document.createElement('td');td.textContent=value;if(index===2)td.className=statusClass(value);tr.append(td)});tr.onclick=()=>select(row.id,true,true);body.append(tr)})}
+async function select(id,push=false,scroll=false){clearTimeout(timer);targetId=id;selectedId=id;if(push)setRecordUrl(id,true);renderRows();const row=rows.find(x=>x.id===id);showSummary(row);if(row){notice(`当前提交 #${id}：${row.result}，分数 ${row.score}。`);$('pollState').textContent=terminal(row.result)?'评测完成，已停止自动刷新':'评测中，每 3 秒自动刷新'}if(loadedSourceId!==id){$('codeTitle').textContent=`源代码 #${id}`;$('code').textContent='正在读取代码';try{const params=new URLSearchParams({group,course,id}),r=await fetch(`/api/submission?${params}`),data=await r.json();if(!r.ok)throw new Error(data.error||'读取失败');const d=new DOMParser().parseFromString(data.html,'text/html'),head=[...d.querySelectorAll('h3')].find(x=>x.textContent.includes('源代码')),node=head?.nextElementSibling;source=(node?.textContent||'').trim();loadedSourceId=id;$('code').textContent=source||'没有读取到源代码'}catch(error){source='';loadedSourceId='';$('code').textContent=`读取代码失败：${error.message}`}}if(push&&row&&!terminal(row.result))timer=setTimeout(refresh,3000);if(scroll)window.scrollTo({top:0,behavior:'smooth'})}
+async function refresh(){clearTimeout(timer);$('refresh').disabled=true;try{const params=new URLSearchParams({group,course});if(problem)params.set('problem',problem);const r=await fetch(`/api/submissions?${params}`),data=await r.json();if(!r.ok)throw new Error(data.error||'读取失败');rows=parseRows(data.html);renderRows();let target=targetId?rows.find(x=>x.id===targetId):rows[0];if(targetId&&!target){notice(`正在等待本次提交 #${targetId} 出现在记录中`);$('pollState').textContent='每 3 秒自动刷新';timer=setTimeout(refresh,3000);return}if(target){if(!targetId){targetId=target.id;setRecordUrl(target.id,false)}selectedId=target.id;showSummary(target);notice(`当前提交 #${target.id}；共读取 ${data.user||'当前账号'} 的 ${rows.length} 条记录。`);renderRows();if(loadedSourceId!==target.id)await select(target.id,false);if(terminal(target.result)){$('pollState').textContent='评测完成，已停止自动刷新'}else{$('pollState').textContent='评测中，每 3 秒自动刷新';timer=setTimeout(refresh,3000)}}else{notice('暂无提交记录。');$('pollState').textContent='等待提交记录，每 3 秒自动刷新';timer=setTimeout(refresh,3000)} }catch(error){notice(error.message,true);$('pollState').textContent='自动刷新已停止';renderRows()}finally{$('refresh').disabled=false}}
+$('refresh').onclick=refresh;window.addEventListener('popstate',()=>{targetId=(new URLSearchParams(location.search).get('id')||'').replace(/\D/g,'');loadedSourceId='';source='';const row=rows.find(x=>x.id===targetId);row?select(targetId,false):refresh()});$('copy').onclick=async()=>{if(!source)return;try{await navigator.clipboard.writeText(source);notice('代码已复制。',false,'copy')}catch(_){notice('复制失败，请手动选择代码。',true,'copy')}};
+notice('正在读取提交记录…');refresh();
+</script>
+</body>
+</html>

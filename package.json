@@ -1,0 +1,50 @@
+{
+  "name": "openjudge-local-workbench",
+  "version": "0.1.0",
+  "description": "A local desktop client for OpenJudge problem browsing and submissions.",
+  "main": "main.js",
+  "author": "OpenJudge Local Workbench Contributors",
+  "license": "MIT",
+  "private": true,
+  "repository": "https://github.com/WangJerry2013/openjudge-local-workbench",
+  "homepage": "https://github.com/WangJerry2013/openjudge-local-workbench#readme",
+  "bugs": "https://github.com/WangJerry2013/openjudge-local-workbench/issues",
+  "scripts": {
+    "start": "electron .",
+    "pack:mac": "electron-packager . OpenJudge刷题台 --platform=darwin --arch=arm64 --out=release --overwrite --asar --prune=true",
+    "pack:win": "electron-packager . OpenJudge刷题台 --platform=win32 --arch=x64 --out=release --overwrite --asar --prune=true",
+    "dist:mac": "electron-builder --mac dmg zip --arm64",
+    "dist:win": "electron-builder --win nsis portable --x64"
+  },
+  "devDependencies": {
+    "@electron/packager": "^18.3.6",
+    "electron": "^38.2.1",
+    "electron-builder": "^26.0.20"
+  },
+  "build": {
+    "appId": "io.github.openjudge-local.workbench",
+    "productName": "OpenJudge刷题台",
+    "asar": true,
+    "files": [
+      "main.js",
+      "app/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
