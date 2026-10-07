@@ -17,7 +17,7 @@ const STATIC_ROOT = path.join(__dirname, 'app');
 let server;
 let origin = '';
 let cacheRoot = '';
-let captchaUrl = null;
+const captchaUrls = new Map();
 let deepseekKey = null;
 let deepseekModel = 'deepseek-flash';
 
@@ -69,6 +69,8 @@ class MemoryCookieJar {
       return domainOk && target.pathname.startsWith(cookie.path) && (!cookie.secure || target.protocol === 'https:');
     }).map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
   }
+
+  clear() { this.cookies = []; }
 }
 
 const cookieJar = new MemoryCookieJar();
@@ -162,7 +164,7 @@ async function fetchWithCache(url, key) {
 
 async function loginState(course = '2021summers6', group = DEFAULT_GROUP) {
   try {
-    const response = await remoteRequest(`${groupOrigin(group)}/${course}/`);
+    const response = await remoteRequest(`${groupOrigin(group)}/`);
     const html = response.body.toString('utf8');
     const loggedIn = !html.includes('auth/login') && (html.includes('/settings/') || /\/user\/\d+\/?/.test(html));
     const user = html.match(/<a[^>]+href=["'][^"']*\/user\/\d+\/?["'][^>]*>([\s\S]*?)<\/a>/i);
@@ -170,13 +172,39 @@ async function loginState(course = '2021summers6', group = DEFAULT_GROUP) {
   } catch (_) { return { loggedIn: false, user: null }; }
 }
 
-async function loginMeta() {
-  const response = await remoteRequest(`${OJ}/auth/login/`);
+async function loginMeta(group = DEFAULT_GROUP) {
+  group = String(group || DEFAULT_GROUP).trim().toLowerCase();
+  const groupUrl = groupOrigin(group);
+  const response = await remoteRequest(`${groupUrl}/auth/login/`);
   const html = response.body.toString('utf8');
-  const image = html.match(/<img[^>]+src=["']([^"']*(?:captcha|verify|validation|code)[^"']*)["']/i);
-  const field = html.match(/<input[^>]+name=["']([^"']*(?:captcha|verify|validation|code)[^"']*)["']/i);
-  captchaUrl = image ? new URL(image[1], `${OJ}/auth/login/`).toString() : null;
-  return { captcha: Boolean(captchaUrl && field), captchaName: field ? field[1] : null };
+  const form = html.match(/<form\b[^>]*action=["'][^"']*\/api\/auth\/login\/[^"']*["'][^>]*>[\s\S]*?<\/form>/i)?.[0] || html;
+  let field = form.match(/<input[^>]+name=["']([^"']*(?:captcha|verify|validation|code)[^"']*)["']/i);
+  if (!field) {
+    for (const tag of form.match(/<input\b[^>]*>/gi) || []) {
+      const name = attribute(tag, 'name');
+      const type = (attribute(tag, 'type') || 'text').toLowerCase();
+      if (name && !['email', 'password', 'redirectUrl'].includes(name) && ['text', 'number', 'tel'].includes(type)) {
+        field = [tag, name];
+        break;
+      }
+    }
+  }
+  let image = form.match(/<img[^>]+src=["']([^"']*(?:captcha|verify|validation|code)[^"']*)["']/i);
+  if (!image && field) image = form.match(/<img[^>]+src=["']([^"']+)["']/i);
+  const captchaUrl = image ? new URL(image[1], `${groupUrl}/auth/login/`).toString() : null;
+  captchaUrls.set(group, captchaUrl);
+  const interactive = /g-recaptcha|h-captcha|cf-turnstile|turnstile/i.test(form);
+  return { captcha: Boolean(captchaUrl && field), captchaName: field ? field[1] : null, interactive, officialUrl: `${groupUrl}/auth/login/` };
+}
+
+function loginMessage(body, status) {
+  const text = body.toString('utf8');
+  try {
+    const result = JSON.parse(text);
+    const message = result?.message || result?.msg || result?.error;
+    if (typeof message === 'string' && message.trim()) return message.trim();
+  } catch (_) {}
+  return stripText(text) || `登录失败（HTTP ${status}）`;
 }
 
 function problemLinks(html, course, group = DEFAULT_GROUP) {
@@ -278,7 +306,7 @@ function serveStatic(requestPath, response) {
 
 async function handleGet(request, response, url) {
   if (url.pathname === '/api/login/meta') {
-    try { return json(response, 200, await loginMeta()); }
+    try { return json(response, 200, await loginMeta(url.searchParams.get('group') || DEFAULT_GROUP)); }
     catch (error) { return json(response, 502, { error: error.message }); }
   }
   if (url.pathname === '/api/login/status') {
@@ -300,6 +328,9 @@ async function handleGet(request, response, url) {
     } catch (error) { return json(response, GROUP_TOKEN.test(url.searchParams.get('group') || DEFAULT_GROUP) ? 502 : 400, { error: error.message }); }
   }
   if (url.pathname === '/api/captcha') {
+    const group = url.searchParams.get('group') || DEFAULT_GROUP;
+    if (!GROUP_TOKEN.test(group)) return json(response, 400, { error: '团队地址格式不正确' });
+    const captchaUrl = captchaUrls.get(group);
     if (!captchaUrl) return json(response, 404, { error: '当前没有验证码' });
     try {
       const remote = await remoteRequest(captchaUrl);
@@ -376,22 +407,41 @@ async function handlePost(request, response, url) {
     const form = new URLSearchParams({ redirectUrl: '', email, password });
     if (captcha && FIELD.test(captchaName)) form.set(captchaName, captcha);
     try {
-      const remote = await remoteRequest(`${OJ}/api/auth/login/`, {
+      const groupUrl = groupOrigin(group);
+      const remote = await remoteRequest(`${groupUrl}/api/auth/login/`, {
         method: 'POST',
         body: form.toString(),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest', Origin: groupUrl, Referer: `${groupUrl}/auth/login/` },
       });
       const session = await loginState(course, group);
       if (session.loggedIn) return json(response, 200, { ok: true, user: session.user });
-      const meta = await loginMeta();
+      const meta = await loginMeta(group);
       return json(response, 401, {
         ok: false,
-        error: stripText(remote.body.toString('utf8')) || `登录失败（HTTP ${remote.status}）`,
+        error: loginMessage(remote.body, remote.status),
         captcha: meta.captcha,
         captchaName: meta.captchaName,
+        interactive: meta.interactive,
+        officialUrl: meta.officialUrl,
       });
     } catch (error) { return json(response, 502, { error: error.message }); }
     finally { password = ''; }
+  }
+
+  if (url.pathname === '/api/logout') {
+    const group = String(data.group || DEFAULT_GROUP).trim().toLowerCase();
+    if (!GROUP_TOKEN.test(group)) return json(response, 400, { error: '团队地址格式不正确' });
+    let warning = null;
+    try {
+      const groupUrl = groupOrigin(group);
+      await remoteRequest(`${groupUrl}/api/auth/logout/`, {
+        method: 'POST', body: '',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest', Origin: groupUrl, Referer: `${groupUrl}/` },
+      });
+    } catch (error) {
+      warning = `官网注销请求暂时失败，但本地登录状态已清除：${error.message}`;
+    } finally { cookieJar.clear(); }
+    return json(response, 200, { ok: true, warning });
   }
 
   if (url.pathname === '/api/deepseek/settings') {
