@@ -227,7 +227,9 @@ function problemLinks(html, course, group = DEFAULT_GROUP) {
 
 function teamDirectory(html) {
   const titleMatch = html.match(/<div[^>]+class=["'][^"']*group-name[^"']*["'][^>]*>[\s\S]*?<h1[^>]*>([\s\S]*?)<\/h1>/i);
-  const result = { title: titleMatch ? stripText(titleMatch[1]) : 'OpenJudge 团队', contests: [], practices: [] };
+  const join = html.match(/api\.joinGroup\(\s*(\d+)/i);
+  const leave = html.match(/api\.leaveGroup\(\s*(\d+)/i);
+  const result = { title: titleMatch ? stripText(titleMatch[1]) : 'OpenJudge 团队', contests: [], practices: [], groupId: Number((leave || join)?.[1]) || null, membership: leave ? 'member' : join ? 'available' : 'unknown' };
   const item = /<li\b[^>]*class=["'][^"']*(contest-info|practice-info)[^"']*["'][^>]*>([\s\S]*?)<\/li>/gi;
   let match;
   while ((match = item.exec(html))) {
@@ -247,6 +249,60 @@ function teamDirectory(html) {
     if (!target.some(existing => existing.id === entry.id)) target.push(entry);
   }
   return result;
+}
+
+function mergeTeamDirectory(target, source) {
+  for (const key of ['contests', 'practices']) {
+    for (const entry of source[key] || []) if (!target[key].some(item => item.id === entry.id)) target[key].push(entry);
+  }
+  return target;
+}
+
+async function teamCatalog(group) {
+  const groupUrl = groupOrigin(group);
+  const pending = [`${groupUrl}/`], seen = new Set(), warnings = [];
+  let directory = null, cached = false;
+  while (pending.length && seen.size < 40) {
+    const remoteUrl = pending.shift();
+    if (seen.has(remoteUrl)) continue;
+    seen.add(remoteUrl);
+    const result = await fetchWithCache(remoteUrl, `team-page:${group}:${remoteUrl}`);
+    cached ||= result.cached;
+    if (result.warning) warnings.push(result.warning);
+    const parsed = teamDirectory(result.html);
+    directory = directory ? mergeTeamDirectory(directory, parsed) : parsed;
+    for (const match of result.html.matchAll(/<a\b[^>]*href=["']([^"']*contests\/(?:past|coming)[^"']*)["']/gi)) {
+      const candidate = new URL(match[1], remoteUrl);
+      if (candidate.origin === groupUrl && /^\/contests\/(?:past|coming)\/?$/.test(candidate.pathname) && !seen.has(candidate.toString())) pending.push(candidate.toString());
+    }
+  }
+  if (!directory) throw new Error('没有读取到团队目录');
+  directory.contests.sort((left, right) => left.id.localeCompare(right.id));
+  directory.practices.sort((left, right) => left.id.localeCompare(right.id));
+  return { directory, cached, warning: [...new Set(warnings)].join('；') || null };
+}
+
+async function teamChange(group, action) {
+  const groupUrl = groupOrigin(group), session = await loginState('2021summers6', group);
+  if (!session.loggedIn) throw Object.assign(new Error('登录状态已失效，请先在本页登录'), { status: 401 });
+  const home = await remoteRequest(`${groupUrl}/`), directory = teamDirectory(home.body.toString('utf8'));
+  if (!directory.groupId) throw new Error('官网页面没有提供团队操作入口');
+  if (action === 'join' && directory.membership === 'member') return { changed: false, directory };
+  if (action === 'leave' && directory.membership !== 'member') throw new Error('当前账号并未加入此团队');
+  const remote = await remoteRequest(`${groupUrl}/api/group/${action === 'join' ? 'join' : 'leave'}/`, {
+    method: 'POST', body: new URLSearchParams({ groupId: String(directory.groupId) }).toString(),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest', Origin: groupUrl, Referer: `${groupUrl}/` },
+  });
+  const text = remote.body.toString('utf8');
+  if (remote.status >= 400) throw new Error(stripText(text) || `OpenJudge 返回 HTTP ${remote.status}`);
+  try { const payload = JSON.parse(text); if (payload?.error) throw new Error(String(payload.error)); } catch (error) { if (error instanceof SyntaxError) {} else throw error; }
+  return { changed: true, directory };
+}
+
+async function ensureTeamMember(group) {
+  const groupUrl = groupOrigin(group), home = await remoteRequest(`${groupUrl}/`);
+  if (teamDirectory(home.body.toString('utf8')).membership !== 'available') return false;
+  return (await teamChange(group, 'join')).changed;
 }
 
 function submitForm(html) {
@@ -363,10 +419,8 @@ async function handleGet(request, response, url) {
   if (url.pathname === '/api/team') {
     try {
       const group = url.searchParams.get('group') || DEFAULT_GROUP;
-      const groupUrl = groupOrigin(group);
-      const result = await fetchWithCache(`${groupUrl}/`, `team:${group.toLowerCase()}`);
-      const directory = teamDirectory(result.html);
-      return json(response, 200, { ...directory, group: group.toLowerCase(), cached: result.cached, warning: result.warning });
+      const result = await teamCatalog(group);
+      return json(response, 200, { ...result.directory, group: group.toLowerCase(), cached: result.cached, warning: result.warning });
     } catch (error) { return json(response, GROUP_TOKEN.test(url.searchParams.get('group') || DEFAULT_GROUP) ? 502 : 400, { error: error.message }); }
   }
   if (url.pathname === '/api/captcha') {
@@ -486,6 +540,16 @@ async function handlePost(request, response, url) {
     return json(response, 200, { ok: true, warning });
   }
 
+  if (url.pathname === '/api/team/join' || url.pathname === '/api/team/leave') {
+    const group = String(data.group || DEFAULT_GROUP).trim().toLowerCase();
+    const action = url.pathname.endsWith('/join') ? 'join' : 'leave';
+    if (!GROUP_TOKEN.test(group)) return json(response, 400, { error: '团队地址格式不正确' });
+    try {
+      const result = await teamChange(group, action);
+      return json(response, 200, { ok: true, changed: result.changed, group, membership: action === 'join' ? 'member' : 'available', title: result.directory.title });
+    } catch (error) { return json(response, error.status || 502, { error: error.message }); }
+  }
+
   if (url.pathname === '/api/deepseek/settings') {
     let apiKey = String(data.apiKey || '').trim();
     const model = String(data.model || 'deepseek-flash');
@@ -536,13 +600,15 @@ async function handlePost(request, response, url) {
     }
     try {
       const groupUrl = groupOrigin(group);
+      const session = await loginState(course, group);
+      if (!session.loggedIn) return json(response, 401, { error: '尚未登录，请先在本页登录' });
+      const joinedTeam = await ensureTeamMember(group);
       const page = await remoteRequest(`${groupUrl}/${course}/${problem}/submit/`);
       if (page.status === 401) return json(response, 401, { error: '尚未登录，请先在本页登录' });
       const submitPage = page.body.toString('utf8');
       if (isLoginPage(submitPage)) return json(response, 401, { error: '官网没有保存登录状态，请重新登录后再试' });
       const parsed = submitForm(submitPage);
       if (!parsed.action) return json(response, 502, { error: '已登录，但未能识别官网的提交表单；请刷新题目后重试' });
-      const session = await loginState(course, group);
       let before = new Set();
       if (session.loggedIn) {
         try { before = await submissionIds(group, course, problem, session.user); } catch (_) {}
@@ -563,7 +629,7 @@ async function handlePost(request, response, url) {
       }
       let solutionId = responseSolutionId(result);
       if (!solutionId && session.loggedIn) solutionId = await waitForNewSolution(group, course, problem, session.user, before);
-      return json(response, 200, { ok: true, message, solutionId });
+      return json(response, 200, { ok: true, message, solutionId, joinedTeam });
     } catch (error) { return json(response, 502, { error: error.message }); }
   }
   return json(response, 404, { error: '接口不存在' });
