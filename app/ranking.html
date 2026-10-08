@@ -9,7 +9,7 @@
   </style>
 </head>
 <body>
-  <header><div class="history-nav" aria-label="浏览历史"><button class="light" onclick="history.back()">上一步</button><button class="light" onclick="history.forward()">下一步</button></div><h1>比赛排行榜</h1><span id="scope" class="scope"></span><span class="grow"></span><button id="refresh" class="light">刷新</button><a class="btn light" href="/">返回题目</a></header>
+  <header><div class="history-nav" aria-label="浏览历史"><button class="light" onclick="history.back()" title="上一步" aria-label="上一步">←</button><button class="light" onclick="history.forward()" title="下一步" aria-label="下一步">→</button></div><h1>比赛排行榜</h1><span id="scope" class="scope"></span><span class="grow"></span><button id="refresh" class="light" title="刷新排行榜" aria-label="刷新排行榜">↻</button><a class="btn light" href="/" title="返回题目" aria-label="返回题目">⌂</a></header>
   <main><section class="panel"><div class="head"><h2 id="title">排行榜</h2><span class="scope">仅显示官网公开的比赛排名</span></div><div id="content" class="empty">正在读取排行榜…</div></section></main>
   <script>
     const $=id=>document.getElementById(id),query=new URLSearchParams(location.search),group=(query.get('group')||'hihocoder').toLowerCase().replace(/[^a-z0-9-]/g,''),course=(query.get('course')||'').replace(/[^A-Za-z0-9_-]/g,'');$('scope').textContent=`${group}.openjudge.cn / ${course}`;

@@ -14,7 +14,7 @@
   </style>
 </head>
 <body>
-  <header><div class="history-nav" aria-label="浏览历史"><button class="light" onclick="history.back()" title="返回上一页">上一步</button><button class="light" onclick="history.forward()" title="前往下一页">下一步</button></div><h1>提交结果</h1><span id="scope"></span><span class="grow"></span><button id="refresh" class="light">刷新本次提交</button><a class="btn light" href="/">返回题目</a><details id="accountMenu" class="account-menu"><summary id="accountButton">账号</summary><div class="account-dropdown"><div id="accountState" class="account-status">正在检查登录状态</div><a href="/">登录 / 切换账号</a><button type="button" id="logoutButton" class="danger" hidden>退出登录</button></div></details></header>
+  <header><div class="history-nav" aria-label="浏览历史"><button class="light" onclick="history.back()" title="上一步" aria-label="上一步">←</button><button class="light" onclick="history.forward()" title="下一步" aria-label="下一步">→</button></div><h1>提交结果</h1><span id="scope"></span><span class="grow"></span><button id="refresh" class="light" title="刷新本次提交" aria-label="刷新本次提交">↻</button><a class="btn light" href="/" title="返回题目" aria-label="返回题目">⌂</a><details id="accountMenu" class="account-menu"><summary id="accountButton">账号</summary><div class="account-dropdown"><div id="accountState" class="account-status">正在检查登录状态</div><a href="/">登录 / 切换账号</a><button type="button" id="logoutButton" class="danger" hidden>退出登录</button></div></details></header>
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-label="通知"></div>
   <main>
     <section class="summary">
@@ -29,7 +29,7 @@
       <div class="table-wrap"><table><thead><tr><th>#</th><th>题目</th><th>结果</th><th>分数</th><th>内存</th><th>时间</th><th>代码长度</th><th>语言</th><th>提交时间</th></tr></thead><tbody id="history"></tbody></table></div>
     </section>
     <section class="panel">
-      <div class="head"><h2 id="codeTitle">源代码</h2><span class="grow"></span><button id="copy" class="light">复制代码</button></div>
+      <div class="head"><h2 id="codeTitle">源代码</h2><span class="grow"></span><button id="copy" class="light" title="复制代码" aria-label="复制代码">⧉</button></div>
       <pre id="code" class="code">选择一条提交记录查看代码。</pre>
     </section>
   </main>
