@@ -248,6 +248,15 @@ function teamDirectory(html) {
     const target = match[1].toLowerCase() === 'contest-info' ? result.contests : result.practices;
     if (!target.some(existing => existing.id === entry.id)) target.push(entry);
   }
+  // Older contests are plain list items on a team home page, but table rows
+  // on /contests/past; neither format carries the contest-info class.
+  const addContest = (id, title, meta = '') => {
+    if (!result.contests.some(existing => existing.id === id)) result.contests.push({ id, title: stripText(title), count: null, meta: stripText(meta) });
+  };
+  for (const section of html.matchAll(/<div\b[^>]*class=["'][^"']*(?:past-contest|coming-contest)[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi)) {
+    for (const old of section[1].matchAll(/<li\b[^>]*>\s*<a\b[^>]*href=["']\/([A-Za-z0-9_-]+)\/["'][^>]*>([\s\S]*?)<\/a>([\s\S]*?)<\/li>/gi)) addContest(old[1], old[2], old[3]);
+  }
+  for (const old of html.matchAll(/<td\b[^>]*class=["'][^"']*\btitle\b[^"']*["'][^>]*>\s*<a\b[^>]*href=["']\/([A-Za-z0-9_-]+)\/["'][^>]*>([\s\S]*?)<\/a>/gi)) addContest(old[1], old[2]);
   return result;
 }
 
@@ -271,7 +280,7 @@ async function teamCatalog(group) {
     if (result.warning) warnings.push(result.warning);
     const parsed = teamDirectory(result.html);
     directory = directory ? mergeTeamDirectory(directory, parsed) : parsed;
-    for (const match of result.html.matchAll(/<a\b[^>]*href=["']([^"']*contests\/(?:past|coming)[^"']*)["']/gi)) {
+    for (const match of result.html.matchAll(/<a\b[^>]*href=["']([^"']+)["']/gi)) {
       const candidate = new URL(match[1], remoteUrl);
       if (candidate.origin === groupUrl && /^\/contests\/(?:past|coming)\/?$/.test(candidate.pathname) && !seen.has(candidate.toString())) pending.push(candidate.toString());
     }
