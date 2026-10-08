@@ -403,7 +403,7 @@ function json(response, status, payload) {
 }
 
 function serveStatic(requestPath, response) {
-  const files = { '/': 'index.html', '/index.html': 'index.html', '/results.html': 'results.html' };
+  const files = { '/': 'index.html', '/index.html': 'index.html', '/results.html': 'results.html', '/ranking.html': 'ranking.html' };
   const filename = files[requestPath];
   if (!filename) return json(response, 404, { error: '页面不存在' });
   const body = fs.readFileSync(path.join(STATIC_ROOT, filename));
@@ -431,6 +431,16 @@ async function handleGet(request, response, url) {
       const result = await teamCatalog(group);
       return json(response, 200, { ...result.directory, group: group.toLowerCase(), cached: result.cached, warning: result.warning });
     } catch (error) { return json(response, GROUP_TOKEN.test(url.searchParams.get('group') || DEFAULT_GROUP) ? 502 : 400, { error: error.message }); }
+  }
+  if (url.pathname === '/api/ranking') {
+    const group = url.searchParams.get('group') || DEFAULT_GROUP;
+    const course = url.searchParams.get('course') || '';
+    if (!GROUP_TOKEN.test(group) || !TOKEN.test(course)) return json(response, 400, { error: '团队或比赛地址格式不正确' });
+    try {
+      const remoteUrl = `${groupOrigin(group)}/${course}/ranking/`;
+      const result = await fetchWithCache(remoteUrl, `ranking:${group}:${course}`);
+      return json(response, 200, { ...result, url: remoteUrl });
+    } catch (error) { return json(response, 502, { error: error.message }); }
   }
   if (url.pathname === '/api/captcha') {
     const group = url.searchParams.get('group') || DEFAULT_GROUP;

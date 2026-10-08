@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>OpenJudge 排行榜</title>
+  <style>
+    :root{--blue:#3157d5;--bg:#f4f6fa;--line:#dfe3ea;--text:#172033;--muted:#697386;--red:#b42318}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}header{position:sticky;top:0;z-index:5;height:62px;padding:0 24px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}h1{font-size:19px;margin:0}.grow{flex:1}button,a.btn{border:0;border-radius:7px;padding:9px 14px;background:var(--blue);color:#fff;text-decoration:none;cursor:pointer;font:inherit}.light{background:#eef2ff!important;color:#2949ac!important}.history-nav{display:flex;gap:8px}main{max-width:1240px;margin:18px auto;padding:0 18px}.panel{background:#fff;border:1px solid var(--line);border-radius:10px;padding:16px}.head{display:flex;align-items:center;gap:10px;margin-bottom:12px}.head h2{margin:0;font-size:16px}.scope{color:var(--muted);font-size:12px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;white-space:nowrap}th,td{padding:9px 10px;border-bottom:1px solid #eaecf0;text-align:left}th{color:var(--muted);font-size:12px}tr:hover{background:#f7f8fc}.empty{padding:28px;text-align:center;color:var(--muted)}.error{color:var(--red);padding:20px;text-align:center}@media(max-width:800px){header{padding:0 12px}.history-nav{position:fixed;bottom:12px;left:12px;z-index:6;padding:4px;background:#fffd;border:1px solid var(--line);border-radius:10px}main{padding:0 10px 76px}}
+  </style>
+</head>
+<body>
+  <header><div class="history-nav" aria-label="浏览历史"><button class="light" onclick="history.back()">上一步</button><button class="light" onclick="history.forward()">下一步</button></div><h1>比赛排行榜</h1><span id="scope" class="scope"></span><span class="grow"></span><button id="refresh" class="light">刷新</button><a class="btn light" href="/">返回题目</a></header>
+  <main><section class="panel"><div class="head"><h2 id="title">排行榜</h2><span class="scope">仅显示官网公开的比赛排名</span></div><div id="content" class="empty">正在读取排行榜…</div></section></main>
+  <script>
+    const $=id=>document.getElementById(id),query=new URLSearchParams(location.search),group=(query.get('group')||'hihocoder').toLowerCase().replace(/[^a-z0-9-]/g,''),course=(query.get('course')||'').replace(/[^A-Za-z0-9_-]/g,'');$('scope').textContent=`${group}.openjudge.cn / ${course}`;
+    function render(html){const page=new DOMParser().parseFromString(html,'text/html'),table=page.querySelector('table.standing')||page.querySelector('table');if(!table){$('content').className='empty';$('content').textContent='该比赛暂时没有可显示的排行榜。';return}table.querySelectorAll('script,style').forEach(node=>node.remove());table.querySelectorAll('a').forEach(link=>link.removeAttribute('href'));$('title').textContent=`排行榜 · ${course}`;const wrap=document.createElement('div');wrap.className='table-wrap';wrap.append(table);$('content').className='';$('content').replaceChildren(wrap)}
+    async function load(){if(!course){$('content').className='error';$('content').textContent='比赛地址不正确。';return}const button=$('refresh');button.disabled=true;try{const r=await fetch(`/api/ranking?group=${encodeURIComponent(group)}&course=${encodeURIComponent(course)}`),data=await r.json();if(!r.ok)throw new Error(data.error||'读取失败');render(data.html)}catch(error){$('content').className='error';$('content').textContent=`读取排行榜失败：${error.message}`}finally{button.disabled=false}}
+    $('refresh').onclick=load;load();
+  </script>
+</body>
+</html>
