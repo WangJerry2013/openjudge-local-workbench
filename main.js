@@ -412,8 +412,11 @@ function json(response, status, payload) {
 }
 
 function serveStatic(requestPath, response) {
-  const files = { '/': 'index.html', '/index.html': 'index.html', '/results.html': 'results.html', '/ranking.html': 'ranking.html' };
-  const filename = files[requestPath];
+  const files = { '/': 'index.html', '/home': 'index.html', '/index.html': 'index.html', '/results.html': 'results.html', '/ranking.html': 'ranking.html' };
+  const filename = files[requestPath]
+    || (/^\/[a-z0-9-]+\/[A-Za-z0-9_-]+\/?$/.test(requestPath) ? 'index.html' : null)
+    || (/^\/results\/[a-z0-9-]+\/[A-Za-z0-9_-]+\/?$/.test(requestPath) ? 'results.html' : null)
+    || (/^\/ranking\/[a-z0-9-]+\/[A-Za-z0-9_-]+\/?$/.test(requestPath) ? 'ranking.html' : null);
   if (!filename) return json(response, 404, { error: '页面不存在' });
   const body = fs.readFileSync(path.join(STATIC_ROOT, filename));
   response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length });
