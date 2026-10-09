@@ -210,6 +210,15 @@ function loginMessage(body, status) {
 function problemLinks(html, course, group = DEFAULT_GROUP) {
   const found = [];
   const seen = new Set();
+  const titles = new Map();
+  const row = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+  let rowMatch;
+  while ((rowMatch = row.exec(html))) {
+    const idMatch = rowMatch[1].match(new RegExp(`<td\\b[^>]*class=["'][^"']*\\bproblem-id\\b[^"']*["'][^>]*>[\\s\\S]*?<a\\b[^>]*href=["'](?:/)?${course}/([A-Za-z0-9_-]+)/`, 'i'));
+    const titleMatch = rowMatch[1].match(/<td\b[^>]*class=["'][^"']*\btitle\b[^"']*["'][^>]*>[\s\S]*?<a\b[^>]*>([\s\S]*?)<\/a>/i);
+    const title = titleMatch ? stripText(titleMatch[1]) : '';
+    if (idMatch && title) titles.set(idMatch[1], title);
+  }
   const anchor = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let match;
   while ((match = anchor.exec(html))) {
@@ -219,7 +228,7 @@ function problemLinks(html, course, group = DEFAULT_GROUP) {
     if (segments.length !== 2 || segments[0] !== course || !TOKEN.test(segments[1])) continue;
     const id = segments[1];
     if (['status', 'ranking', 'clarify', 'statistics', 'submit'].includes(id) || seen.has(id)) continue;
-    const title = stripText(match[2]);
+    const title = titles.get(id) || stripText(match[2]);
     if (title) { found.push({ id, title }); seen.add(id); }
   }
   return found;
