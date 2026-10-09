@@ -257,6 +257,15 @@ function teamDirectory(html) {
     const target = match[1].toLowerCase() === 'contest-info' ? result.contests : result.practices;
     if (!target.some(existing => existing.id === entry.id)) target.push(entry);
   }
+  // Older team templates keep the standalone practice set outside of a
+  // practice-info list item.  It still has its own /practice/ collection.
+  if (!result.practices.some(item => item.id === 'practice')) {
+    const practiceLink = html.match(/<a\b[^>]*href=["']\/practice\/["'][^>]*>([\s\S]*?)<\/a>([^<]{0,80})/i);
+    if (practiceLink) {
+      const count = stripText(practiceLink[2]).match(/\((\d+)题\)/);
+      result.practices.push({ id: 'practice', title: stripText(practiceLink[1]) || '练习', count: count ? Number(count[1]) : null, meta: '' });
+    }
+  }
   // Older contests are plain list items on a team home page, but table rows
   // on /contests/past; neither format carries the contest-info class.
   const addContest = (id, title, meta = '') => {
