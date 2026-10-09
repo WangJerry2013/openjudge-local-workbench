@@ -412,6 +412,7 @@ function json(response, status, payload) {
 }
 
 function serveStatic(requestPath, response) {
+  if (requestPath.startsWith('/api/')) return json(response, 404, { error: '接口不存在' });
   const files = { '/': 'index.html', '/home': 'index.html', '/index.html': 'index.html', '/results.html': 'results.html', '/ranking.html': 'ranking.html' };
   const filename = files[requestPath]
     || (/^\/[a-z0-9-]+\/[A-Za-z0-9_-]+\/?$/.test(requestPath) ? 'index.html' : null)
