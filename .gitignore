@@ -1,6 +1,5 @@
-node_modules/
-release/
-dist/
-packages/
+cache/
+__pycache__/
+*.py[cod]
 *.log
 .DS_Store
