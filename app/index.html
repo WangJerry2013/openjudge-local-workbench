@@ -121,7 +121,7 @@ function saveCourseList(key,problems){const all=readStored(courseListKey);all[ke
 function scoreKey(group,course,problem){return `${group}/${course}/${problem}`}
 function storedScore(group,course,problem){const entry=readStored(scoreCacheKey)[scoreKey(group,course,problem)];return entry&&Object.hasOwn(entry,'score')?entry:null}
 function saveScore(group,course,problem,score){const all=readStored(scoreCacheKey);all[scoreKey(group,course,problem)]={score,checkedAt:Date.now()};writeStored(scoreCacheKey,all)}
-function scoreText(score){return Number.isFinite(score)?`${Number.isInteger(score)?score:score.toFixed(2)}`:'暂无得分'}
+function scoreText(score){return Number.isFinite(score)?`${Number.isInteger(score)?score:score.toFixed(2)}`:''}
 function scoreClass(score){return `score-${!Number.isFinite(score)?'unanswered':score>=100?'full':'partial'}`}
 function colorScore(element,score){element.classList.remove('score-unanswered','score-partial','score-full');element.classList.add(scoreClass(score))}
 function scoreFromStatus(html){const page=new DOMParser().parseFromString(html,'text/html');let highest=null;page.querySelectorAll('table tr').forEach(row=>{const cells=[...row.querySelectorAll('td')].map(cell=>cell.textContent.trim());if(cells.length<5)return;const match=cells[4].match(/\d+(?:\.\d+)?/);if(!match)return;const score=Number(match[0]);if(Number.isFinite(score))highest=highest===null?score:Math.max(highest,score)});return highest}
