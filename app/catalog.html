@@ -16,7 +16,7 @@
     <section class="listing"><table><thead><tr><th style="width:46%">名称</th><th style="width:34%">信息</th><th style="width:20%">类型</th></tr></thead><tbody id="items"></tbody></table><div id="empty" class="empty" hidden></div></section>
   </main>
 <script>
-const $=id=>document.getElementById(id),teamsKey='oj-team-list-v1',teamCacheKey='oj-team-directory-cache-v1',courseCacheKey='oj-course-list-cache-v1',scoreCacheKey='oj-problem-best-score-v1',defaultGroup='hihocoder';
+const $=id=>document.getElementById(id),teamsKey='oj-team-list-v1',teamCacheKey='oj-team-directory-cache-v2',courseCacheKey='oj-course-list-cache-v1',scoreCacheKey='oj-problem-best-score-v1',defaultGroup='hihocoder';
 function normalize(value){const text=String(value||'').trim().toLowerCase();if(/^[a-z0-9-]+$/.test(text))return text;try{const host=new URL(text.includes('://')?text:`http://${text}`).hostname;return(host.match(/^([a-z0-9-]+)\.openjudge\.cn$/)||[])[1]||''}catch(_){return''}}
 function read(key){try{return JSON.parse(localStorage.getItem(key)||'{}')}catch(_){return{}}}function write(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch(_){}}
 function teams(){const stored=read(teamsKey),raw=Array.isArray(stored)?stored:[],items=[],seen=new Set();for(const item of raw){const slug=normalize(typeof item==='string'?item:item.slug);if(slug&&!seen.has(slug)){seen.add(slug);items.push({slug,title:typeof item==='object'?String(item.title||''):''})}}return items.length?items:[{slug:defaultGroup,title:''}]}
