@@ -304,8 +304,8 @@ async function teamCatalog(group) {
     }
   }
   if (!directory) throw new Error('没有读取到团队目录');
-  directory.contests.sort((left, right) => left.id.localeCompare(right.id));
-  directory.practices.sort((left, right) => left.id.localeCompare(right.id));
+  // OpenJudge returns team collections newest-first. Keep that added order
+  // instead of alphabetizing IDs, which hides recently added collections.
   return { directory, cached, warning: [...new Set(warnings)].join('；') || null };
 }
 
