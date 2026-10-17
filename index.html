@@ -18,6 +18,7 @@
     @media(max-width:1180px){.grid{grid-template-columns:1fr}#problem,textarea{height:auto;min-height:440px}}
     @media(max-width:900px){header{padding:0 12px}.workspace{display:block}.sidebar{position:relative;top:auto;height:auto;max-height:42vh;border-right:0;border-bottom:1px solid var(--line)}main{padding-bottom:24px}.sub{display:none}}
   </style>
+  <link rel="stylesheet" href="/theme.css">
 </head>
 <body>
   <header><h1>OpenJudge 刷题台</h1><nav class="topnav" aria-label="主导航"><a href="/home">首页</a><a href="/catalog">目录</a></nav><span style="flex:1"></span><span id="settingsState" class="small">DeepSeek 未配置</span><button id="settingsOpen" class="light icon-button" title="设置" aria-label="设置">⚙</button><details id="accountMenu" class="account-menu"><summary id="accountButton">账号</summary><div class="account-dropdown"><div id="accountState" class="account-status">正在检查登录状态</div><button type="button" id="loginOpen">登录</button><button type="button" id="logoutButton" class="danger" hidden>退出</button></div></details></header>
@@ -182,5 +183,6 @@ document.addEventListener('click',event=>{if(!$('accountMenu').contains(event.ta
 $('submit').onclick=async()=>{const u=urls();if(!u.c||!u.p)return msg('请先输入正确题号。','bad');if(loadedProblemKey!==`${u.g}/${u.c}/${u.p}`)return msg('请先成功加载当前题目；短题号会自动查找已保存的团队，也可粘贴完整 OpenJudge 链接。','bad');if(!$('code').value.trim())return msg('代码还是空的。','bad');const b=$('submit');b.disabled=true;b.textContent='正在提交';save();try{const r=await fetch('/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({group:u.g,course:u.c,problem:u.p,language:$('language').value,source:$('code').value})}),result=await r.json();if(!r.ok||!result.ok)throw new Error(result.error||'OpenJudge 拒绝了提交');await refreshTeamMembership(u.g);if(result.joinedTeam)msg(`已自动加入 ${u.g}.openjudge.cn。`,'ok');location.href=resultsPageUrl(u,result.solutionId||'')}catch(e){msg(`提交失败：${e.message}`,'bad');await checkLogin()}finally{b.disabled=false;b.textContent='提交'}};
 if(!route){$('problemKey').value='';$('homeMessage').hidden=false}else $('homeMessage').hidden=true;links();checkLogin();loadDeepseekSettings();if(route?.problem){loadList(false);loadProblem()}
 </script>
+<script src="/theme.js"></script>
 </body>
 </html>
